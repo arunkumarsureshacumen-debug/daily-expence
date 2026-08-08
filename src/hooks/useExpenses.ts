@@ -48,7 +48,7 @@ function mergeExpenses(local: Expense[], remote: Expense[]): Expense[] {
 export type CloudSyncStatus = 'idle' | 'syncing' | 'error' | 'offline'
 
 export function useExpenses() {
-  const { uid, isReady, isConfigured } = useAuth()
+  const { deviceId, isReady, isConfigured } = useAuth()
   const [expenses, setExpenses] = useState<Expense[]>(() =>
     dedupeExpenses(sortExpensesByDate(storageService.getExpenses())),
   )
@@ -70,22 +70,22 @@ export function useExpenses() {
     return () => window.removeEventListener('storage', onStorage)
   }, [])
 
-  // 3. Pull from Firestore when the anonymous UID is available
+  // 3. Pull from Firestore when deviceId is available
   const lastSyncedRef = useRef<string>(signatureOf(expenses))
   useEffect(() => {
-    if (!isConfigured || !isReady || !uid) return
+    if (!isConfigured || !isReady || !deviceId) return
     if (!firestoreService.isAvailable()) return
     let cancelled = false
     setSyncStatus('syncing')
     ;(async () => {
       try {
-        const remote = await firestoreService.fetchExpenses(uid)
+        const remote = await firestoreService.fetchExpenses(deviceId)
         if (cancelled) return
         const local = dedupeExpenses(sortExpensesByDate(storageService.getExpenses()))
         const merged = dedupeExpenses(mergeExpenses(local, remote))
         setExpenses(merged)
         lastSyncedRef.current = signatureOf(merged)
-        await firestoreService.replaceAllExpenses(uid, merged)
+        await firestoreService.replaceAllExpenses(deviceId, merged)
         if (!cancelled) setSyncStatus('idle')
       } catch (err) {
         console.error('[Firestore] pull failed', err)
@@ -95,11 +95,11 @@ export function useExpenses() {
     return () => {
       cancelled = true
     }
-  }, [uid, isReady, isConfigured])
+  }, [deviceId, isReady, isConfigured])
 
   // 4. Push to Firestore when local expenses change
   useEffect(() => {
-    if (!isConfigured || !isReady || !uid) return
+    if (!isConfigured || !isReady || !deviceId) return
     if (!firestoreService.isAvailable()) return
     const signature = signatureOf(expenses)
     if (signature === lastSyncedRef.current) return
@@ -110,7 +110,7 @@ export function useExpenses() {
     const timer = window.setTimeout(async () => {
       try {
         setSyncStatus('syncing')
-        await firestoreService.replaceAllExpenses(uid, expenses)
+        await firestoreService.replaceAllExpenses(deviceId, expenses)
         lastSyncedRef.current = signature
         setSyncStatus('idle')
       } catch (err) {
@@ -119,15 +119,15 @@ export function useExpenses() {
       }
     }, 600)
     return () => window.clearTimeout(timer)
-  }, [expenses, uid, isReady, isConfigured])
+  }, [expenses, deviceId, isReady, isConfigured])
 
   // 5. Flush when the browser comes back online
   useEffect(() => {
     const onOnline = () => {
-      if (!uid) return
+      if (!deviceId) return
       if (signatureOf(expenses) === lastSyncedRef.current) return
       firestoreService
-        .replaceAllExpenses(uid, expenses)
+        .replaceAllExpenses(deviceId, expenses)
         .then(() => {
           lastSyncedRef.current = signatureOf(expenses)
           setSyncStatus('idle')
@@ -139,7 +139,7 @@ export function useExpenses() {
     }
     window.addEventListener('online', onOnline)
     return () => window.removeEventListener('online', onOnline)
-  }, [expenses, uid])
+  }, [expenses, deviceId])
 
   const addExpense = useCallback((data: Omit<Expense, 'id' | 'createdAt'>) => {
     const newExpense: Expense = {
@@ -174,12 +174,12 @@ export function useExpenses() {
   const clearAll = useCallback(() => {
     storageService.clearAll()
     setExpenses([])
-    if (uid && firestoreService.isAvailable()) {
-      firestoreService.clearExpenses(uid).catch((err) => {
+    if (deviceId && firestoreService.isAvailable()) {
+      firestoreService.clearExpenses(deviceId).catch((err) => {
         console.error('[Firestore] clear failed', err)
       })
     }
-  }, [uid])
+  }, [deviceId])
 
   const importExpenses = useCallback((items: Expense[]) => {
     setExpenses(sortExpensesByDate(items))

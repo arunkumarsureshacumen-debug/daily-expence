@@ -107,9 +107,41 @@ Anonymous auth still produces a unique `uid` per device — these rules ensure e
 
 ### How the no-login sync works
 
-When the app loads, it silently calls `signInAnonymously()`. Firebase generates a unique anonymous ID (e.g. `AbCdEf123456…`) and stores it locally. All your expenses go to `users/{that-anon-id}/expenses/...`. The user never sees a login screen.
+When the app loads, it silently calls `signInAnonymously()` (Firebase requires this even though no UI is shown) and generates a **per-device ID** (a random string like `d_abc123…`) stored in LocalStorage. All your expenses go to `users/{deviceId}/expenses/...`.
 
-If you want to switch devices later, export your data from Settings and import it on the new device.
+**Per-device means per-installation.** Open the app on a new device and you'll get a fresh ID — that's expected. To share data across devices, use the **Pair device** feature:
+
+1. Open **Settings → Pair another device → Show my pairing code** on Device A.
+2. Open **Settings → Pair another device → I have a pairing code** on Device B.
+3. Type the 6-character code from A into B. Both devices now share the same device ID and stay in sync.
+
+The pairing code is just a one-time mapping stored in Firestore under `pairing/{code}`. It never expires, but you can ignore it after the devices are linked.
+
+### Recommended Firestore security rules
+
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Pairing codes: anyone authenticated can read them to claim a device.
+    match /pairing/{code} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+                    && request.resource.data.deviceId is string;
+      allow update, delete: if false;
+    }
+
+    // Per-device data: any signed-in user can read/write any path.
+    // The deviceId (random string stored in LocalStorage) is the real
+    // "secret" — it must be known to access the data.
+    match /users/{deviceId}/{document=**} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
+```
+
+This works for a personal app where the URL is private. The deviceId acts as the access token — anyone with the URL + the deviceId (e.g. via the pairing code) can read/write. For a multi-user production app you'd swap in real auth.
 
 ## ☁️ Deploy to Vercel
 
@@ -179,9 +211,10 @@ src/
 ### Firestore (cloud, when configured)
 
 ```
-users/{anonymousUid}/
-  expenses/{expenseId}    ← one document per expense
-  settings/main           ← single document with currency / budget / theme
+users/{deviceId}/          ← deviceId is per-installation, sharable via pairing code
+  expenses/{expenseId}     ← one document per expense
+  settings/main            ← single document with currency / budget / theme
+pairing/{6charCode}        ← maps a pairing code to a deviceId
 ```
 
 Each expense looks like:
@@ -205,9 +238,11 @@ Corrupted JSON or missing fields are handled gracefully — the app falls back t
 ## 🔄 How sync works
 
 ```
-App loads → signInAnonymously() → Firebase returns a unique UID
+App loads → signInAnonymously() (satisfies Firestore rules)
         ↓
-useExpenses pulls from Firestore users/{uid}/expenses
+deviceService.getOrCreateDeviceId() → random string in LocalStorage
+        ↓
+useExpenses pulls from Firestore users/{deviceId}/expenses
         ↓
 Merged with LocalStorage (newer createdAt wins per expense)
         ↓
@@ -217,9 +252,12 @@ React re-renders (instant, offline-safe)
         ↓
 useEffect saves to LocalStorage           ← always
         ↓
-useEffect (debounced 600ms) pushes to Firestore  ← only when configured
+useEffect (debounced 600ms) pushes to Firestore users/{deviceId}/...  ← only when configured
         ↓
 Firestore SDK queues writes if offline; flushes on reconnect
+        ↓
+To sync another device → generate pairing code on Device A,
+                         enter it on Device B → both use same deviceId
 ```
 
 ## 🧪 Tested user flows
@@ -251,9 +289,9 @@ Firestore SDK queues writes if offline; flushes on reconnect
 
 This is a personal-finance tool. Your data lives in two places:
 1. **Your device** — always, in LocalStorage.
-2. **Firestore** — only when configured, scoped to a unique anonymous ID per device. No analytics, no telemetry, no third-party sharing.
+2. **Firestore** — only when configured, scoped to a random device ID per installation. The device ID is the access token; it's stored in LocalStorage and shared between paired devices via a one-time pairing code.
 
-When you want to move to a new device, use **Settings → Export Expenses** to download a JSON backup, then **Import Expenses** on the new device.
+No analytics, no telemetry, no third-party sharing. To move data to a new device without pairing, use **Settings → Export Expenses** to download a JSON backup, then **Import Expenses** on the new device.
 
 ---
 

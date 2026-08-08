@@ -6,6 +6,7 @@ import {
   CloudOff,
   Download,
   Globe,
+  Link2,
   Moon,
   Palette,
   RefreshCw,
@@ -18,6 +19,7 @@ import { Header } from '../components/Header'
 import { ListRow, Section } from '../components/Section'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Notice } from '../components/Notice'
+import { PairDeviceSheet } from '../components/PairDeviceSheet'
 import { useSettings } from '../hooks/useSettings'
 import { useExpenses } from '../hooks/useExpenses'
 import { useAuth } from '../hooks/useAuth'
@@ -35,13 +37,14 @@ const CURRENCIES: { code: CurrencyCode; label: string; symbol: string }[] = [
   { code: 'CAD', label: 'Canadian Dollar', symbol: 'C$' },
 ]
 
-const APP_VERSION = '1.2.0'
+const APP_VERSION = '1.3.0'
 
 export function SettingsPage() {
   const { settings, setBudget, setCurrency, setTheme, updateSettings } = useSettings()
   const { expenses, clearAll, importExpenses } = useExpenses()
-  const { isConfigured, isReady, uid, error: authError } = useAuth()
+  const { isConfigured, isReady, deviceId, error: authError } = useAuth()
   const [currencyPickerOpen, setCurrencyPickerOpen] = useState(false)
+  const [pairSheetOpen, setPairSheetOpen] = useState(false)
   const [budgetDraft, setBudgetDraft] = useState<string>(
     String(settings.monthlyBudget),
   )
@@ -92,8 +95,8 @@ export function SettingsPage() {
     if (!isConfigured) return 'Not configured'
     if (authError) return 'Sync error'
     if (!isReady) return 'Connecting…'
-    return `Synced · device ${uid?.slice(0, 6) ?? '…'}`
-  }, [isConfigured, isReady, uid, authError])
+    return `Synced · ${deviceId?.slice(0, 10) ?? '…'}`
+  }, [isConfigured, isReady, deviceId, authError])
 
   const SyncIcon = !isConfigured || authError ? CloudOff : Cloud
 
@@ -149,17 +152,32 @@ export function SettingsPage() {
           </div>
         ) : null}
 
+        <Section title="Devices">
+          <div className="rounded-2xl bg-white dark:bg-card-dark border border-border dark:border-border-dark overflow-hidden">
+            <ListRow
+              icon={<Link2 size={18} />}
+              label="Pair another device"
+              value="Sync without an account"
+              onClick={() => setPairSheetOpen(true)}
+            />
+            <ListRow
+              icon={<SyncIcon size={18} />}
+              label="Cloud Sync"
+              value={syncLabel}
+            />
+          </div>
+          <p className="mt-2 text-xs text-muted dark:text-muted-dark px-1">
+            Pairing links two devices so they share the same Firestore data.
+            Open this on both phones / laptops to start.
+          </p>
+        </Section>
+
         <Section title="Profile">
           <div className="rounded-2xl bg-white dark:bg-card-dark border border-border dark:border-border-dark overflow-hidden">
             <ListRow
               icon={<CircleUserRound size={18} />}
               label="Personal"
               value="Local only"
-            />
-            <ListRow
-              icon={<SyncIcon size={18} />}
-              label="Cloud Sync"
-              value={syncLabel}
             />
             <ListRow
               icon={<ShieldCheck size={18} />}
@@ -353,6 +371,11 @@ export function SettingsPage() {
           setConfirmClear(false)
         }}
         onCancel={() => setConfirmClear(false)}
+      />
+
+      <PairDeviceSheet
+        open={pairSheetOpen}
+        onClose={() => setPairSheetOpen(false)}
       />
 
       <div className="h-24" />

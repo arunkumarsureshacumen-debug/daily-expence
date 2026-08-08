@@ -14,14 +14,14 @@ import { db } from './firebase'
 const EXPENSES_COLLECTION = 'expenses'
 const SETTINGS_DOC = 'settings'
 
-function expensesRef(uid: string) {
+function expensesRef(ownerId: string) {
   if (!db) throw new Error('Firestore is not initialized')
-  return collection(db, 'users', uid, EXPENSES_COLLECTION)
+  return collection(db, 'users', ownerId, EXPENSES_COLLECTION)
 }
 
-function settingsRef(uid: string) {
+function settingsRef(ownerId: string) {
   if (!db) throw new Error('Firestore is not initialized')
-  return doc(db, 'users', uid, SETTINGS_DOC, 'main')
+  return doc(db, 'users', ownerId, SETTINGS_DOC, 'main')
 }
 
 function stripUndefined<T extends Record<string, unknown>>(obj: T): T {
@@ -38,9 +38,9 @@ export const firestoreService = {
     return db !== null
   },
 
-  async fetchExpenses(uid: string): Promise<Expense[]> {
+  async fetchExpenses(ownerId: string): Promise<Expense[]> {
     if (!db) return []
-    const snap = await getDocs(expensesRef(uid))
+    const snap = await getDocs(expensesRef(ownerId))
     return snap.docs
       .map((d) => {
         const data = d.data() as Partial<Expense> & { updatedAt?: unknown }
@@ -61,10 +61,10 @@ export const firestoreService = {
       .filter((e) => e.id && e.date)
   },
 
-  async putExpense(uid: string, expense: Expense): Promise<void> {
+  async putExpense(ownerId: string, expense: Expense): Promise<void> {
     if (!db) return
     await setDoc(
-      doc(expensesRef(uid), expense.id),
+      doc(expensesRef(ownerId), expense.id),
       stripUndefined({
         ...expense,
         updatedAt: serverTimestamp(),
@@ -73,20 +73,20 @@ export const firestoreService = {
     )
   },
 
-  async deleteExpenseDoc(uid: string, id: string): Promise<void> {
+  async deleteExpenseDoc(ownerId: string, id: string): Promise<void> {
     if (!db) return
-    await deleteDoc(doc(expensesRef(uid), id))
+    await deleteDoc(doc(expensesRef(ownerId), id))
   },
 
   async replaceAllExpenses(
-    uid: string,
+    ownerId: string,
     expenses: Expense[],
   ): Promise<void> {
     if (!db || expenses.length === 0) return
     const batch = writeBatch(db)
     for (const expense of expenses) {
       batch.set(
-        doc(expensesRef(uid), expense.id),
+        doc(expensesRef(ownerId), expense.id),
         stripUndefined({
           ...expense,
           updatedAt: serverTimestamp(),
@@ -97,18 +97,18 @@ export const firestoreService = {
     await batch.commit()
   },
 
-  async clearExpenses(uid: string): Promise<void> {
+  async clearExpenses(ownerId: string): Promise<void> {
     if (!db) return
-    const snap = await getDocs(expensesRef(uid))
+    const snap = await getDocs(expensesRef(ownerId))
     if (snap.empty) return
     const batch = writeBatch(db)
     snap.docs.forEach((d) => batch.delete(d.ref))
     await batch.commit()
   },
 
-  async fetchSettings(uid: string): Promise<Settings | null> {
+  async fetchSettings(ownerId: string): Promise<Settings | null> {
     if (!db) return null
-    const docSnap = await getDoc(settingsRef(uid))
+    const docSnap = await getDoc(settingsRef(ownerId))
     if (!docSnap.exists()) return null
     const data = docSnap.data() as Partial<Settings>
     if (
@@ -125,10 +125,10 @@ export const firestoreService = {
     }
   },
 
-  async putSettings(uid: string, settings: Settings): Promise<void> {
+  async putSettings(ownerId: string, settings: Settings): Promise<void> {
     if (!db) return
     await setDoc(
-      settingsRef(uid),
+      settingsRef(ownerId),
       stripUndefined({
         ...settings,
         updatedAt: serverTimestamp(),
