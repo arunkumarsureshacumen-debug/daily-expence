@@ -43,6 +43,30 @@ export function sortExpensesByDate(expenses: Expense[]): Expense[] {
   })
 }
 
+function expenseFingerprint(e: Expense): string {
+  return [
+    e.amount.toFixed(2),
+    e.category,
+    e.description,
+    e.date,
+    e.time,
+    e.paymentMethod,
+  ].join('|')
+}
+
+export function dedupeExpenses(expenses: Expense[]): Expense[] {
+  const byId = new Map<string, Expense>()
+  const seen = new Set<string>()
+  for (const e of expenses) {
+    if (byId.has(e.id)) continue
+    const fp = expenseFingerprint(e)
+    if (seen.has(fp)) continue
+    seen.add(fp)
+    byId.set(e.id, e)
+  }
+  return sortExpensesByDate(Array.from(byId.values()))
+}
+
 export function getExpensesByDate(
   expenses: Expense[],
   dateKey: string,

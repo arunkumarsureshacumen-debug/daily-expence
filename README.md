@@ -64,7 +64,7 @@ The app works offline without any Firebase configuration, but to enable cloud sy
 1. Go to https://console.firebase.google.com/
 2. Click **Add project**, give it a name, follow the prompts.
 3. In the left sidebar, click **Build → Authentication** → **Get started** → **Sign-in method** tab.
-4. Enable **Anonymous** sign-in (it's already enabled by default in most projects — verify).
+4. ⚠️ **Enable the Anonymous provider.** Even though the user never sees a login screen, Firebase requires this provider to be enabled to issue anonymous IDs. If you skip this you'll see "auth/configuration-not-found" in the console and a yellow banner in the app's Settings page.
 5. In the left sidebar, click **Build → Firestore Database** → **Create database** → start in **production mode** → pick a region.
 
 ### 2. Get your web app config

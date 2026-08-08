@@ -8,6 +8,7 @@ import {
   Globe,
   Moon,
   Palette,
+  RefreshCw,
   ShieldCheck,
   Trash2,
   Upload,
@@ -16,6 +17,7 @@ import {
 import { Header } from '../components/Header'
 import { ListRow, Section } from '../components/Section'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { Notice } from '../components/Notice'
 import { useSettings } from '../hooks/useSettings'
 import { useExpenses } from '../hooks/useExpenses'
 import { useAuth } from '../hooks/useAuth'
@@ -38,13 +40,14 @@ const APP_VERSION = '1.2.0'
 export function SettingsPage() {
   const { settings, setBudget, setCurrency, setTheme, updateSettings } = useSettings()
   const { expenses, clearAll, importExpenses } = useExpenses()
-  const { isConfigured, isReady, uid } = useAuth()
+  const { isConfigured, isReady, uid, error: authError } = useAuth()
   const [currencyPickerOpen, setCurrencyPickerOpen] = useState(false)
   const [budgetDraft, setBudgetDraft] = useState<string>(
     String(settings.monthlyBudget),
   )
   const [confirmClear, setConfirmClear] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
+  const [reloadKey, setReloadKey] = useState(0)
 
   useEffect(() => {
     setBudgetDraft(String(settings.monthlyBudget))
@@ -87,17 +90,65 @@ export function SettingsPage() {
 
   const syncLabel = useMemo(() => {
     if (!isConfigured) return 'Not configured'
+    if (authError) return 'Sync error'
     if (!isReady) return 'Connecting…'
     return `Synced · device ${uid?.slice(0, 6) ?? '…'}`
-  }, [isConfigured, isReady, uid])
+  }, [isConfigured, isReady, uid, authError])
 
-  const SyncIcon = !isConfigured ? CloudOff : Cloud
+  const SyncIcon = !isConfigured || authError ? CloudOff : Cloud
 
   return (
-    <div className="pb-24 animate-fade-in">
+    <div className="pb-24 animate-fade-in" key={reloadKey}>
       <Header title="Settings" />
 
       <div className="pt-2">
+        {authError === 'auth/configuration-not-found' ? (
+          <div className="px-4 pt-4">
+            <Notice
+              tone="warning"
+              title="Cloud sync is paused"
+              description={
+                <>
+                  <strong>Anonymous sign-in</strong> is not enabled in your
+                  Firebase project, so Firestore sync is failing.
+                  <br />
+                  <span className="block mt-1">
+                    Firebase Console → <em>Authentication</em> →{' '}
+                    <em>Sign-in method</em> → enable <strong>Anonymous</strong>.
+                  </span>
+                  <span className="block mt-1">
+                    Your data is safe on this device and will sync as soon as
+                    you enable it and reload.
+                  </span>
+                </>
+              }
+              action={
+                <button
+                  type="button"
+                  onClick={() => {
+                    setReloadKey((k) => k + 1)
+                    window.location.reload()
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 h-9 rounded-full bg-primary text-white dark:bg-white dark:text-primary text-xs font-medium tap-feedback"
+                >
+                  <RefreshCw size={14} />
+                  Reload after enabling
+                </button>
+              }
+            />
+          </div>
+        ) : null}
+
+        {authError === 'auth/network-request-failed' ? (
+          <div className="px-4 pt-4">
+            <Notice
+              tone="info"
+              title="Offline"
+              description="Cloud sync is paused while you're offline. Changes are saved locally and will sync when you're back online."
+            />
+          </div>
+        ) : null}
+
         <Section title="Profile">
           <div className="rounded-2xl bg-white dark:bg-card-dark border border-border dark:border-border-dark overflow-hidden">
             <ListRow

@@ -8,6 +8,7 @@ import {
   calculateDailyAverage,
   calculateLargestExpense,
   calculateMonthlyTotal,
+  dedupeExpenses,
   filterExpenses,
   getExpensesByDate,
   getMonthlyExpenses,
@@ -49,7 +50,7 @@ export type CloudSyncStatus = 'idle' | 'syncing' | 'error' | 'offline'
 export function useExpenses() {
   const { uid, isReady, isConfigured } = useAuth()
   const [expenses, setExpenses] = useState<Expense[]>(() =>
-    sortExpensesByDate(storageService.getExpenses()),
+    dedupeExpenses(sortExpensesByDate(storageService.getExpenses())),
   )
   const [syncStatus, setSyncStatus] = useState<CloudSyncStatus>('idle')
 
@@ -80,8 +81,8 @@ export function useExpenses() {
       try {
         const remote = await firestoreService.fetchExpenses(uid)
         if (cancelled) return
-        const local = sortExpensesByDate(storageService.getExpenses())
-        const merged = mergeExpenses(local, remote)
+        const local = dedupeExpenses(sortExpensesByDate(storageService.getExpenses()))
+        const merged = dedupeExpenses(mergeExpenses(local, remote))
         setExpenses(merged)
         lastSyncedRef.current = signatureOf(merged)
         await firestoreService.replaceAllExpenses(uid, merged)

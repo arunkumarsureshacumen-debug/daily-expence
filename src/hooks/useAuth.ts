@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
 import type { User } from 'firebase/auth'
-import { authService } from '../services/authService'
+import { authService, type AuthErrorCode } from '../services/authService'
 
 export type AuthStatus = 'loading' | 'ready' | 'unconfigured'
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null)
   const [status, setStatus] = useState<AuthStatus>('loading')
+  const [error, setError] = useState<AuthErrorCode | null>(null)
 
   useEffect(() => {
     if (!authService.isAvailable()) {
@@ -15,17 +16,24 @@ export function useAuth() {
       return () => undefined
     }
 
-    const unsubscribe = authService.observeAuth((next) => {
+    const unsubAuth = authService.observeAuth((next) => {
       setUser(next)
       setStatus('ready')
     })
-    return unsubscribe
+    const unsubError = authService.observeError((code) => {
+      setError(code)
+    })
+    return () => {
+      unsubAuth()
+      unsubError()
+    }
   }, [])
 
   return {
     user,
     uid: user?.uid ?? null,
     status,
+    error,
     isConfigured: authService.isConfigured,
     isReady: status === 'ready',
     isLoading: status === 'loading',
