@@ -48,7 +48,7 @@ function mergeExpenses(local: Expense[], remote: Expense[]): Expense[] {
 export type CloudSyncStatus = 'idle' | 'syncing' | 'error' | 'offline'
 
 export function useExpenses() {
-  const { deviceId, isReady, isConfigured } = useAuth()
+  const { ownerId, isReady, isConfigured } = useAuth()
   const [expenses, setExpenses] = useState<Expense[]>(() =>
     dedupeExpenses(sortExpensesByDate(storageService.getExpenses())),
   )
@@ -70,22 +70,22 @@ export function useExpenses() {
     return () => window.removeEventListener('storage', onStorage)
   }, [])
 
-  // 3. Pull from Firestore when deviceId is available
+  // 3. Pull from Firestore when ownerId is available
   const lastSyncedRef = useRef<string>(signatureOf(expenses))
   useEffect(() => {
-    if (!isConfigured || !isReady || !deviceId) return
+    if (!isConfigured || !isReady || !ownerId) return
     if (!firestoreService.isAvailable()) return
     let cancelled = false
     setSyncStatus('syncing')
     ;(async () => {
       try {
-        const remote = await firestoreService.fetchExpenses(deviceId)
+        const remote = await firestoreService.fetchExpenses(ownerId)
         if (cancelled) return
         const local = dedupeExpenses(sortExpensesByDate(storageService.getExpenses()))
         const merged = dedupeExpenses(mergeExpenses(local, remote))
         setExpenses(merged)
         lastSyncedRef.current = signatureOf(merged)
-        await firestoreService.replaceAllExpenses(deviceId, merged)
+        await firestoreService.replaceAllExpenses(ownerId, merged)
         if (!cancelled) setSyncStatus('idle')
       } catch (err) {
         console.error('[Firestore] pull failed', err)
@@ -95,11 +95,11 @@ export function useExpenses() {
     return () => {
       cancelled = true
     }
-  }, [deviceId, isReady, isConfigured])
+  }, [ownerId, isReady, isConfigured])
 
   // 4. Push to Firestore when local expenses change
   useEffect(() => {
-    if (!isConfigured || !isReady || !deviceId) return
+    if (!isConfigured || !isReady || !ownerId) return
     if (!firestoreService.isAvailable()) return
     const signature = signatureOf(expenses)
     if (signature === lastSyncedRef.current) return
@@ -110,7 +110,7 @@ export function useExpenses() {
     const timer = window.setTimeout(async () => {
       try {
         setSyncStatus('syncing')
-        await firestoreService.replaceAllExpenses(deviceId, expenses)
+        await firestoreService.replaceAllExpenses(ownerId, expenses)
         lastSyncedRef.current = signature
         setSyncStatus('idle')
       } catch (err) {
@@ -119,15 +119,15 @@ export function useExpenses() {
       }
     }, 600)
     return () => window.clearTimeout(timer)
-  }, [expenses, deviceId, isReady, isConfigured])
+  }, [expenses, ownerId, isReady, isConfigured])
 
   // 5. Flush when the browser comes back online
   useEffect(() => {
     const onOnline = () => {
-      if (!deviceId) return
+      if (!ownerId) return
       if (signatureOf(expenses) === lastSyncedRef.current) return
       firestoreService
-        .replaceAllExpenses(deviceId, expenses)
+        .replaceAllExpenses(ownerId, expenses)
         .then(() => {
           lastSyncedRef.current = signatureOf(expenses)
           setSyncStatus('idle')
@@ -139,7 +139,7 @@ export function useExpenses() {
     }
     window.addEventListener('online', onOnline)
     return () => window.removeEventListener('online', onOnline)
-  }, [expenses, deviceId])
+  }, [expenses, ownerId])
 
   const addExpense = useCallback((data: Omit<Expense, 'id' | 'createdAt'>) => {
     const newExpense: Expense = {
@@ -174,12 +174,12 @@ export function useExpenses() {
   const clearAll = useCallback(() => {
     storageService.clearAll()
     setExpenses([])
-    if (deviceId && firestoreService.isAvailable()) {
-      firestoreService.clearExpenses(deviceId).catch((err) => {
+    if (ownerId && firestoreService.isAvailable()) {
+      firestoreService.clearExpenses(ownerId).catch((err) => {
         console.error('[Firestore] clear failed', err)
       })
     }
-  }, [deviceId])
+  }, [ownerId])
 
   const importExpenses = useCallback((items: Expense[]) => {
     setExpenses(sortExpensesByDate(items))

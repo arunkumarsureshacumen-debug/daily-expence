@@ -1,17 +1,21 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { User } from 'firebase/auth'
-import { authService, type AuthErrorCode } from '../services/authService'
+import {
+  authErrorMessage,
+  authService,
+  type AuthErrorCode,
+} from '../services/authService'
 import { deviceService } from '../services/deviceService'
 
+export type AuthMode = 'anonymous' | 'email'
 export type AuthStatus = 'loading' | 'ready' | 'unconfigured'
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null)
   const [status, setStatus] = useState<AuthStatus>('loading')
   const [error, setError] = useState<AuthErrorCode | null>(null)
-  const [deviceId, setDeviceIdState] = useState<string>(() =>
-    deviceService.getOrCreateDeviceId(),
-  )
+  const [authMode, setAuthMode] = useState<AuthMode>('anonymous')
+  const [deviceId] = useState<string>(() => deviceService.getOrCreateDeviceId())
 
   useEffect(() => {
     if (!authService.isAvailable()) {
@@ -22,6 +26,8 @@ export function useAuth() {
 
     const unsubAuth = authService.observeAuth((next) => {
       setUser(next)
+      const isEmail = next?.providerData.some((p) => p.providerId === 'password') ?? false
+      setAuthMode(isEmail ? 'email' : 'anonymous')
       setStatus('ready')
     })
     const unsubError = authService.observeError((code) => {
@@ -33,22 +39,36 @@ export function useAuth() {
     }
   }, [])
 
-  const setDeviceId = useCallback((id: string) => {
-    const trimmed = id.trim()
-    if (!trimmed) return
-    deviceService.setDeviceId(trimmed)
-    setDeviceIdState(trimmed)
+  const signUp = useCallback(async (email: string, password: string) => {
+    await authService.signUpWithEmail(email, password)
   }, [])
+
+  const signIn = useCallback(async (email: string, password: string) => {
+    await authService.signInWithEmail(email, password)
+  }, [])
+
+  const signOut = useCallback(async () => {
+    await authService.signOut()
+  }, [])
+
+  const ownerId = authMode === 'email' && user ? user.uid : deviceId
 
   return {
     user,
     uid: user?.uid ?? null,
+    email: user?.email ?? null,
     deviceId,
-    setDeviceId,
+    ownerId,
+    authMode,
     status,
     error,
+    errorMessage: authErrorMessage(error),
     isConfigured: authService.isConfigured,
     isReady: status === 'ready',
     isLoading: status === 'loading',
+    isEmailUser: authMode === 'email',
+    signUp,
+    signIn,
+    signOut,
   }
 }

@@ -2,7 +2,7 @@
 
 A premium, mobile-first Daily Expense Tracker web app built with **React + TypeScript + Vite + Tailwind CSS**, with **Firebase Firestore** cloud sync, **PWA** support, and **LocalStorage** as an offline cache.
 
-No login. No email. No OTP. Just open the app and start tracking — your data syncs to Firestore in the background using an anonymous device ID.
+Sign in with your email on any device and your expenses follow you — the same dashboard, budget, and history on mobile and desktop. Local-only (anonymous) mode is still supported for users who don't want an account.
 
 > Your expense data is stored locally on this device and synced to Firestore. Nothing is shared with anyone.
 
@@ -15,7 +15,7 @@ No login. No email. No OTP. Just open the app and start tracking — your data s
 - **History** with search, date / category / payment-method filters
 - **Statistics** with category breakdown and daily trend chart
 - **Settings**: currency, monthly budget, theme (Light / Dark / System), data export / import / clear
-- **Firebase Firestore** cloud sync — auto, no login required
+- **Firebase Firestore** cloud sync — automatic, signed-in users sync across all their devices
 - **LocalStorage** as offline cache so the app keeps working without internet
 - **PWA**: installable to home screen, works offline, standalone display
 - **Dark mode** with proper system theme support
@@ -27,7 +27,7 @@ No login. No email. No OTP. Just open the app and start tracking — your data s
 - Tailwind CSS 3
 - Lucide React icons
 - React Router 7
-- Firebase 12 (Anonymous Auth + Firestore)
+- Firebase 12 (Email/Password + Anonymous Auth + Firestore)
 - vite-plugin-pwa (Workbox)
 - LocalStorage (offline cache)
 
@@ -64,8 +64,9 @@ The app works offline without any Firebase configuration, but to enable cloud sy
 1. Go to https://console.firebase.google.com/
 2. Click **Add project**, give it a name, follow the prompts.
 3. In the left sidebar, click **Build → Authentication** → **Get started** → **Sign-in method** tab.
-4. ⚠️ **Enable the Anonymous provider.** Even though the user never sees a login screen, Firebase requires this provider to be enabled to issue anonymous IDs. If you skip this you'll see "auth/configuration-not-found" in the console and a yellow banner in the app's Settings page.
-5. In the left sidebar, click **Build → Firestore Database** → **Create database** → start in **production mode** → pick a region.
+4. ⚠️ **Enable the Email/Password provider** so users can sign in / sign up with the same email on every device.
+5. *(Optional)* Also enable the **Anonymous** provider — it's used as a fallback for users who skip login. Without it, anonymous users will see a sign-in screen instead.
+6. In the left sidebar, click **Build → Firestore Database** → **Create database** → start in **production mode** → pick a region.
 
 ### 2. Get your web app config
 
@@ -96,6 +97,9 @@ In the Firebase console → Firestore → **Rules** tab, paste:
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    // Per-user data: any signed-in user can read/write their own documents.
+    // The {uid} is the Firebase Auth UID — stable across devices for the
+    // same email, and unique per anonymous session.
     match /users/{uid}/{document=**} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
     }
@@ -103,45 +107,21 @@ service cloud.firestore {
 }
 ```
 
-Anonymous auth still produces a unique `uid` per device — these rules ensure each device only reads and writes its own data.
+These rules ensure each signed-in user (email or anonymous) can only read and write their own data.
 
-### How the no-login sync works
+### How sync works
 
-When the app loads, it silently calls `signInAnonymously()` (Firebase requires this even though no UI is shown) and generates a **per-device ID** (a random string like `d_abc123…`) stored in LocalStorage. All your expenses go to `users/{deviceId}/expenses/...`.
+When the app loads it calls `signInAnonymously()` (silent, no UI) so anyone can use the app without typing anything. All data is keyed off the Firebase Auth UID and stored at `users/{uid}/...`.
 
-**Per-device means per-installation.** Open the app on a new device and you'll get a fresh ID — that's expected. To share data across devices, use the **Pair device** feature:
+**Email sign-in is the recommended flow for cross-device sync:**
 
-1. Open **Settings → Pair another device → Show my pairing code** on Device A.
-2. Open **Settings → Pair another device → I have a pairing code** on Device B.
-3. Type the 6-character code from A into B. Both devices now share the same device ID and stay in sync.
+1. Open the app on your phone → tap **Sign up**, enter email + password.
+2. Open the app on your desktop → tap **Sign in**, use the same email + password.
+3. Both devices now show the same expenses, budget, and settings in real time.
 
-The pairing code is just a one-time mapping stored in Firestore under `pairing/{code}`. It never expires, but you can ignore it after the devices are linked.
+**Anonymous mode** still works for users who skip login — each browser/install gets a unique Firebase Auth UID, so data is scoped to that single device. To sync data across devices, sign in with the same email.
 
-### Recommended Firestore security rules
-
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    // Pairing codes: anyone authenticated can read them to claim a device.
-    match /pairing/{code} {
-      allow read: if request.auth != null;
-      allow create: if request.auth != null
-                    && request.resource.data.deviceId is string;
-      allow update, delete: if false;
-    }
-
-    // Per-device data: any signed-in user can read/write any path.
-    // The deviceId (random string stored in LocalStorage) is the real
-    // "secret" — it must be known to access the data.
-    match /users/{deviceId}/{document=**} {
-      allow read, write: if request.auth != null;
-    }
-  }
-}
-```
-
-This works for a personal app where the URL is private. The deviceId acts as the access token — anyone with the URL + the deviceId (e.g. via the pairing code) can read/write. For a multi-user production app you'd swap in real auth.
+When you sign up with email on a device that already has local data, that data is automatically pushed to your new account's Firestore path so nothing is lost.
 
 ## ☁️ Deploy to Vercel
 
@@ -211,10 +191,9 @@ src/
 ### Firestore (cloud, when configured)
 
 ```
-users/{deviceId}/          ← deviceId is per-installation, sharable via pairing code
+users/{uid}/               ← uid is the Firebase Auth UID (email or anonymous)
   expenses/{expenseId}     ← one document per expense
   settings/main            ← single document with currency / budget / theme
-pairing/{6charCode}        ← maps a pairing code to a deviceId
 ```
 
 Each expense looks like:
@@ -238,11 +217,11 @@ Corrupted JSON or missing fields are handled gracefully — the app falls back t
 ## 🔄 How sync works
 
 ```
-App loads → signInAnonymously() (satisfies Firestore rules)
+App loads → signInAnonymously() (if not signed in)
         ↓
-deviceService.getOrCreateDeviceId() → random string in LocalStorage
+user is the source of truth for the ownerId
         ↓
-useExpenses pulls from Firestore users/{deviceId}/expenses
+useExpenses pulls from Firestore users/{uid}/expenses
         ↓
 Merged with LocalStorage (newer createdAt wins per expense)
         ↓
@@ -252,12 +231,11 @@ React re-renders (instant, offline-safe)
         ↓
 useEffect saves to LocalStorage           ← always
         ↓
-useEffect (debounced 600ms) pushes to Firestore users/{deviceId}/...  ← only when configured
+useEffect (debounced 600ms) pushes to Firestore users/{uid}/...  ← only when configured
         ↓
 Firestore SDK queues writes if offline; flushes on reconnect
         ↓
-To sync another device → generate pairing code on Device A,
-                         enter it on Device B → both use same deviceId
+To sync another device → sign in with the same email on the other device
 ```
 
 ## 🧪 Tested user flows
@@ -270,7 +248,7 @@ To sync another device → generate pairing code on Device A,
 - ✅ Monthly totals + per-day + per-category breakdowns
 - ✅ Dark mode (Light / Dark / System)
 - ✅ LocalStorage persistence across reloads
-- ✅ Cloud sync (push / pull / merge) — anonymous device ID
+- ✅ Cloud sync (push / pull / merge) — email or anonymous device ID
 - ✅ Offline-first behavior (writes are queued, app stays usable)
 - ✅ Mobile layout (360–430 px) + safe-area insets
 - ✅ PWA installation on iOS / Android
@@ -289,9 +267,9 @@ To sync another device → generate pairing code on Device A,
 
 This is a personal-finance tool. Your data lives in two places:
 1. **Your device** — always, in LocalStorage.
-2. **Firestore** — only when configured, scoped to a random device ID per installation. The device ID is the access token; it's stored in LocalStorage and shared between paired devices via a one-time pairing code.
+2. **Firestore** — only when configured, scoped to your Firebase Auth UID. Email accounts are tied to your email address and accessible from any device you sign in on; anonymous sessions are scoped to a single browser/install.
 
-No analytics, no telemetry, no third-party sharing. To move data to a new device without pairing, use **Settings → Export Expenses** to download a JSON backup, then **Import Expenses** on the new device.
+No analytics, no telemetry, no third-party sharing. To move data to a new device, just sign in with the same email — or use **Settings → Export Expenses** to download a JSON backup, then **Import Expenses** on the new device.
 
 ---
 

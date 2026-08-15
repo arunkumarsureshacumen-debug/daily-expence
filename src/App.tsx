@@ -7,6 +7,7 @@ import { StatisticsPage } from './pages/StatisticsPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { AddExpensePage } from './pages/AddExpensePage'
 import { ExpenseDetailsPage } from './pages/ExpenseDetailsPage'
+import { LoginPage } from './pages/LoginPage'
 import { useTheme } from './hooks/useTheme'
 import { useAuth } from './hooks/useAuth'
 
@@ -21,8 +22,23 @@ function ScrollToTop() {
 function Layout({ children }: { children: React.ReactNode }) {
   const location = useLocation()
   useTheme()
-  // Triggers anonymous sign-in behind the scenes (no UI).
-  useAuth()
+  const { isReady, user } = useAuth()
+
+  if (!isReady) {
+    return (
+      <div className="mx-auto w-full max-w-[430px] min-h-screen bg-bg dark:bg-bg-dark flex items-center justify-center">
+        <div className="text-sm text-muted dark:text-muted-dark">Loading…</div>
+      </div>
+    )
+  }
+
+  if (!user && location.pathname !== '/login') {
+    return <Navigate to="/login" replace />
+  }
+
+  if (user && location.pathname === '/login') {
+    return <Navigate to="/" replace />
+  }
 
   const active: NavKey =
     location.pathname === '/'
@@ -38,7 +54,8 @@ function Layout({ children }: { children: React.ReactNode }) {
 
   const hideChrome =
     location.pathname.startsWith('/add') ||
-    location.pathname.startsWith('/expense/')
+    location.pathname.startsWith('/expense/') ||
+    location.pathname.startsWith('/login')
 
   return (
     <>
@@ -62,6 +79,7 @@ export default function App() {
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="/add" element={<AddExpensePage />} />
           <Route path="/expense/:id" element={<ExpenseDetailsPage />} />
+          <Route path="/login" element={<LoginPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Layout>

@@ -1,7 +1,10 @@
 import {
   browserLocalPersistence,
+  createUserWithEmailAndPassword,
   onAuthStateChanged,
   signInAnonymously,
+  signInWithEmailAndPassword,
+  signOut as firebaseSignOut,
   type User,
 } from 'firebase/auth'
 import { auth, isFirebaseConfigured } from './firebase'
@@ -10,6 +13,12 @@ type AuthErrorCode =
   | 'auth/configuration-not-found'
   | 'auth/network-request-failed'
   | 'auth/too-many-requests'
+  | 'auth/invalid-email'
+  | 'auth/missing-password'
+  | 'auth/invalid-credential'
+  | 'auth/email-already-in-use'
+  | 'auth/weak-password'
+  | 'auth/user-disabled'
   | 'unknown'
 
 function classifyAuthError(err: unknown): AuthErrorCode {
@@ -23,13 +32,77 @@ function classifyAuthError(err: unknown): AuthErrorCode {
       return 'auth/network-request-failed'
     case 'auth/too-many-requests':
       return 'auth/too-many-requests'
+    case 'auth/invalid-email':
+      return 'auth/invalid-email'
+    case 'auth/missing-password':
+      return 'auth/missing-password'
+    case 'auth/invalid-credential':
+    case 'auth/wrong-password':
+    case 'auth/user-not-found':
+      return 'auth/invalid-credential'
+    case 'auth/email-already-in-use':
+      return 'auth/email-already-in-use'
+    case 'auth/weak-password':
+      return 'auth/weak-password'
+    case 'auth/user-disabled':
+      return 'auth/user-disabled'
     default:
       return 'unknown'
   }
 }
 
+export function authErrorMessage(code: AuthErrorCode | null): string | null {
+  if (!code) return null
+  switch (code) {
+    case 'auth/configuration-not-found':
+      return 'Email/password sign-in is not enabled in Firebase. Enable it in Authentication → Sign-in method.'
+    case 'auth/network-request-failed':
+      return 'Network error. Check your connection and try again.'
+    case 'auth/too-many-requests':
+      return 'Too many attempts. Please wait a moment and try again.'
+    case 'auth/invalid-email':
+      return 'Please enter a valid email address.'
+    case 'auth/missing-password':
+      return 'Please enter your password.'
+    case 'auth/invalid-credential':
+      return 'Incorrect email or password.'
+    case 'auth/email-already-in-use':
+      return 'An account already exists for that email. Try signing in.'
+    case 'auth/weak-password':
+      return 'Password should be at least 6 characters.'
+    case 'auth/user-disabled':
+      return 'This account has been disabled.'
+    case 'unknown':
+      return 'Something went wrong. Please try again.'
+    default:
+      return 'Something went wrong. Please try again.'
+  }
+}
+
+const SIGNED_OUT_KEY = 'det.auth.signedOut.v1'
+
+function readSignedOutFlag(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    return window.localStorage.getItem(SIGNED_OUT_KEY) === '1'
+  } catch {
+    return false
+  }
+}
+
+function writeSignedOutFlag(value: boolean): void {
+  if (typeof window === 'undefined') return
+  try {
+    if (value) window.localStorage.setItem(SIGNED_OUT_KEY, '1')
+    else window.localStorage.removeItem(SIGNED_OUT_KEY)
+  } catch {
+    // ignore
+  }
+}
+
 let signInPromise: Promise<User | null> | null = null
 let lastError: AuthErrorCode | null = null
+let anonymousDisabled = readSignedOutFlag()
 const errorListeners = new Set<(code: AuthErrorCode | null) => void>()
 
 function notifyError(code: AuthErrorCode | null) {
@@ -39,6 +112,7 @@ function notifyError(code: AuthErrorCode | null) {
 
 async function ensureAnonymousSignIn(): Promise<User | null> {
   if (!auth) return null
+  if (anonymousDisabled) return null
   if (signInPromise) return signInPromise
   signInPromise = (async () => {
     try {
@@ -74,6 +148,65 @@ export const authService = {
 
   ensureSignedIn(): Promise<User | null> {
     return ensureAnonymousSignIn()
+  },
+
+  async signUpWithEmail(email: string, password: string): Promise<User | null> {
+    if (!auth) return null
+    try {
+      await auth.setPersistence(browserLocalPersistence)
+      const cred = await createUserWithEmailAndPassword(auth, email, password)
+      notifyError(null)
+      signInPromise = null
+      anonymousDisabled = false
+      writeSignedOutFlag(false)
+      return cred.user
+    } catch (err) {
+      const code = classifyAuthError(err)
+      console.error('[Firebase] sign-up failed', err)
+      notifyError(code)
+      throw err
+    }
+  },
+
+  async signInWithEmail(email: string, password: string): Promise<User | null> {
+    if (!auth) return null
+    try {
+      await auth.setPersistence(browserLocalPersistence)
+      const cred = await signInWithEmailAndPassword(auth, email, password)
+      notifyError(null)
+      signInPromise = null
+      anonymousDisabled = false
+      writeSignedOutFlag(false)
+      return cred.user
+    } catch (err) {
+      const code = classifyAuthError(err)
+      console.error('[Firebase] sign-in failed', err)
+      notifyError(code)
+      throw err
+    }
+  },
+
+  async signOut(): Promise<void> {
+    if (!auth) return
+    anonymousDisabled = true
+    writeSignedOutFlag(true)
+    try {
+      await firebaseSignOut(auth)
+      signInPromise = null
+      notifyError(null)
+    } catch (err) {
+      anonymousDisabled = false
+      writeSignedOutFlag(false)
+      const code = classifyAuthError(err)
+      console.error('[Firebase] sign-out failed', err)
+      notifyError(code)
+      throw err
+    }
+  },
+
+  resetAutoAnonymous(): void {
+    anonymousDisabled = false
+    writeSignedOutFlag(false)
   },
 
   observeAuth(callback: (user: User | null) => void): () => void {

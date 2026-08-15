@@ -14,16 +14,13 @@ export const deviceService = {
     return window.localStorage.getItem(DEVICE_ID_KEY)
   },
 
-  setDeviceId(id: string): void {
-    if (typeof window === 'undefined') return
-    window.localStorage.setItem(DEVICE_ID_KEY, id)
-  },
-
   getOrCreateDeviceId(): string {
     const existing = this.getDeviceId()
     if (existing) return existing
     const fresh = randomDeviceId()
-    this.setDeviceId(fresh)
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(DEVICE_ID_KEY, fresh)
+    }
     return fresh
   },
 

@@ -9,7 +9,7 @@ function signatureOf(settings: Settings): string {
 }
 
 export function useSettings() {
-  const { deviceId, isReady, isConfigured } = useAuth()
+  const { ownerId, isReady, isConfigured } = useAuth()
   const [settings, setSettings] = useState<Settings>(() =>
     storageService.getSettings(),
   )
@@ -31,21 +31,21 @@ export function useSettings() {
     return () => window.removeEventListener('storage', onStorage)
   }, [])
 
-  // 3. Pull from Firestore when deviceId is available
+  // 3. Pull from Firestore when ownerId is available
   useEffect(() => {
-    if (!isConfigured || !isReady || !deviceId) return
+    if (!isConfigured || !isReady || !ownerId) return
     if (!firestoreService.isAvailable()) return
     let cancelled = false
     ;(async () => {
       try {
-        const remote = await firestoreService.fetchSettings(deviceId)
+        const remote = await firestoreService.fetchSettings(ownerId)
         if (cancelled) return
         if (remote) {
           setSettings(remote)
           lastSyncedRef.current = signatureOf(remote)
         } else {
           const local = storageService.getSettings()
-          await firestoreService.putSettings(deviceId, local)
+          await firestoreService.putSettings(ownerId, local)
           lastSyncedRef.current = signatureOf(local)
         }
       } catch (err) {
@@ -55,24 +55,24 @@ export function useSettings() {
     return () => {
       cancelled = true
     }
-  }, [deviceId, isReady, isConfigured])
+  }, [ownerId, isReady, isConfigured])
 
   // 4. Push to Firestore when settings change
   useEffect(() => {
-    if (!isConfigured || !isReady || !deviceId) return
+    if (!isConfigured || !isReady || !ownerId) return
     if (!firestoreService.isAvailable()) return
     const signature = signatureOf(settings)
     if (signature === lastSyncedRef.current) return
     const timer = window.setTimeout(async () => {
       try {
-        await firestoreService.putSettings(deviceId, settings)
+        await firestoreService.putSettings(ownerId, settings)
         lastSyncedRef.current = signature
       } catch (err) {
         console.error('[Firestore] settings push failed', err)
       }
     }, 600)
     return () => window.clearTimeout(timer)
-  }, [settings, deviceId, isReady, isConfigured])
+  }, [settings, ownerId, isReady, isConfigured])
 
   const setBudget = useCallback((monthlyBudget: number) => {
     setSettings((prev) => ({ ...prev, monthlyBudget: Math.max(0, monthlyBudget) }))

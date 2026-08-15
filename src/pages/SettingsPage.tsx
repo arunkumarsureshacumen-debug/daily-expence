@@ -6,7 +6,8 @@ import {
   CloudOff,
   Download,
   Globe,
-  Link2,
+  LogOut,
+  Mail,
   Moon,
   Palette,
   RefreshCw,
@@ -19,7 +20,6 @@ import { Header } from '../components/Header'
 import { ListRow, Section } from '../components/Section'
 import { ConfirmDialog } from '../components/ConfirmDialog'
 import { Notice } from '../components/Notice'
-import { PairDeviceSheet } from '../components/PairDeviceSheet'
 import { useSettings } from '../hooks/useSettings'
 import { useExpenses } from '../hooks/useExpenses'
 import { useAuth } from '../hooks/useAuth'
@@ -42,13 +42,21 @@ const APP_VERSION = '1.3.0'
 export function SettingsPage() {
   const { settings, setBudget, setCurrency, setTheme, updateSettings } = useSettings()
   const { expenses, clearAll, importExpenses } = useExpenses()
-  const { isConfigured, isReady, deviceId, error: authError } = useAuth()
+  const {
+    isConfigured,
+    isReady,
+    deviceId,
+    email,
+    isEmailUser,
+    signOut,
+    error: authError,
+  } = useAuth()
   const [currencyPickerOpen, setCurrencyPickerOpen] = useState(false)
-  const [pairSheetOpen, setPairSheetOpen] = useState(false)
   const [budgetDraft, setBudgetDraft] = useState<string>(
     String(settings.monthlyBudget),
   )
   const [confirmClear, setConfirmClear] = useState(false)
+  const [confirmSignOut, setConfirmSignOut] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const [reloadKey, setReloadKey] = useState(0)
 
@@ -95,8 +103,9 @@ export function SettingsPage() {
     if (!isConfigured) return 'Not configured'
     if (authError) return 'Sync error'
     if (!isReady) return 'Connecting…'
+    if (isEmailUser) return email ? `Signed in · ${email}` : 'Signed in'
     return `Synced · ${deviceId?.slice(0, 10) ?? '…'}`
-  }, [isConfigured, isReady, deviceId, authError])
+  }, [isConfigured, isReady, deviceId, authError, isEmailUser, email])
 
   const SyncIcon = !isConfigured || authError ? CloudOff : Cloud
 
@@ -152,33 +161,40 @@ export function SettingsPage() {
           </div>
         ) : null}
 
-        <Section title="Devices">
+        <Section title="Account">
           <div className="rounded-2xl bg-white dark:bg-card-dark border border-border dark:border-border-dark overflow-hidden">
             <ListRow
-              icon={<Link2 size={18} />}
-              label="Pair another device"
-              value="Sync without an account"
-              onClick={() => setPairSheetOpen(true)}
+              icon={isEmailUser ? <Mail size={18} /> : <CircleUserRound size={18} />}
+              label={isEmailUser ? 'Signed in' : 'Account'}
+              value={
+                isEmailUser
+                  ? email ?? 'Email user'
+                  : 'Anonymous (this device only)'
+              }
             />
             <ListRow
               icon={<SyncIcon size={18} />}
               label="Cloud Sync"
               value={syncLabel}
             />
+            {isEmailUser ? (
+              <ListRow
+                icon={<LogOut size={18} />}
+                label="Sign out"
+                value=""
+                onClick={() => setConfirmSignOut(true)}
+              />
+            ) : null}
           </div>
           <p className="mt-2 text-xs text-muted dark:text-muted-dark px-1">
-            Pairing links two devices so they share the same Firestore data.
-            Open this on both phones / laptops to start.
+            {isEmailUser
+              ? 'Sign in with the same email on any device to see the same expenses.'
+              : 'Sign in with an email to sync across devices.'}
           </p>
         </Section>
 
-        <Section title="Profile">
+        <Section title="Privacy">
           <div className="rounded-2xl bg-white dark:bg-card-dark border border-border dark:border-border-dark overflow-hidden">
-            <ListRow
-              icon={<CircleUserRound size={18} />}
-              label="Personal"
-              value="Local only"
-            />
             <ListRow
               icon={<ShieldCheck size={18} />}
               label="Privacy"
@@ -373,9 +389,22 @@ export function SettingsPage() {
         onCancel={() => setConfirmClear(false)}
       />
 
-      <PairDeviceSheet
-        open={pairSheetOpen}
-        onClose={() => setPairSheetOpen(false)}
+      <ConfirmDialog
+        open={confirmSignOut}
+        title="Sign out?"
+        description={
+          email
+            ? `Your data stays safe in the cloud. Sign back in with ${email} to see it again.`
+            : 'Your data stays safe in the cloud. Sign back in to see it again.'
+        }
+        confirmLabel="Sign out"
+        cancelLabel="Cancel"
+        destructive
+        onConfirm={async () => {
+          setConfirmSignOut(false)
+          await signOut()
+        }}
+        onCancel={() => setConfirmSignOut(false)}
       />
 
       <div className="h-24" />
