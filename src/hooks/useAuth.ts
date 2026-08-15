@@ -47,6 +47,10 @@ export function useAuth() {
     await authService.signInWithEmail(email, password)
   }, [])
 
+  const signInAnonymously = useCallback(async () => {
+    await authService.signInAnonymously()
+  }, [])
+
   const signOut = useCallback(async () => {
     await authService.signOut()
   }, [])
@@ -69,6 +73,7 @@ export function useAuth() {
     isEmailUser: authMode === 'email',
     signUp,
     signIn,
+    signInAnonymously,
     signOut,
   }
 }

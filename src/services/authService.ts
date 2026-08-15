@@ -79,30 +79,8 @@ export function authErrorMessage(code: AuthErrorCode | null): string | null {
   }
 }
 
-const SIGNED_OUT_KEY = 'det.auth.signedOut.v1'
-
-function readSignedOutFlag(): boolean {
-  if (typeof window === 'undefined') return false
-  try {
-    return window.localStorage.getItem(SIGNED_OUT_KEY) === '1'
-  } catch {
-    return false
-  }
-}
-
-function writeSignedOutFlag(value: boolean): void {
-  if (typeof window === 'undefined') return
-  try {
-    if (value) window.localStorage.setItem(SIGNED_OUT_KEY, '1')
-    else window.localStorage.removeItem(SIGNED_OUT_KEY)
-  } catch {
-    // ignore
-  }
-}
-
 let signInPromise: Promise<User | null> | null = null
 let lastError: AuthErrorCode | null = null
-let anonymousDisabled = readSignedOutFlag()
 const errorListeners = new Set<(code: AuthErrorCode | null) => void>()
 
 function notifyError(code: AuthErrorCode | null) {
@@ -112,7 +90,6 @@ function notifyError(code: AuthErrorCode | null) {
 
 async function ensureAnonymousSignIn(): Promise<User | null> {
   if (!auth) return null
-  if (anonymousDisabled) return null
   if (signInPromise) return signInPromise
   signInPromise = (async () => {
     try {
@@ -157,8 +134,6 @@ export const authService = {
       const cred = await createUserWithEmailAndPassword(auth, email, password)
       notifyError(null)
       signInPromise = null
-      anonymousDisabled = false
-      writeSignedOutFlag(false)
       return cred.user
     } catch (err) {
       const code = classifyAuthError(err)
@@ -175,8 +150,6 @@ export const authService = {
       const cred = await signInWithEmailAndPassword(auth, email, password)
       notifyError(null)
       signInPromise = null
-      anonymousDisabled = false
-      writeSignedOutFlag(false)
       return cred.user
     } catch (err) {
       const code = classifyAuthError(err)
@@ -186,17 +159,17 @@ export const authService = {
     }
   },
 
+  async signInAnonymously(): Promise<User | null> {
+    return ensureAnonymousSignIn()
+  },
+
   async signOut(): Promise<void> {
     if (!auth) return
-    anonymousDisabled = true
-    writeSignedOutFlag(true)
     try {
       await firebaseSignOut(auth)
       signInPromise = null
       notifyError(null)
     } catch (err) {
-      anonymousDisabled = false
-      writeSignedOutFlag(false)
       const code = classifyAuthError(err)
       console.error('[Firebase] sign-out failed', err)
       notifyError(code)
@@ -204,17 +177,11 @@ export const authService = {
     }
   },
 
-  resetAutoAnonymous(): void {
-    anonymousDisabled = false
-    writeSignedOutFlag(false)
-  },
-
   observeAuth(callback: (user: User | null) => void): () => void {
     if (!auth) {
       callback(null)
       return () => undefined
     }
-    void ensureAnonymousSignIn()
     return onAuthStateChanged(auth, callback)
   },
 

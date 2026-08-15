@@ -1,18 +1,27 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Eye, EyeOff, LogIn, UserPlus, Wallet } from 'lucide-react'
+import { Eye, EyeOff, LogIn, UserPlus, UserRound, Wallet } from 'lucide-react'
 import { useAuth } from '../hooks/useAuth'
 
 type Mode = 'signin' | 'signup'
 
 export function LoginPage() {
   const navigate = useNavigate()
-  const { signIn, signUp, isConfigured, errorMessage, error, isReady } = useAuth()
+  const {
+    signIn,
+    signUp,
+    signInAnonymously,
+    isConfigured,
+    errorMessage,
+    error,
+    isReady,
+  } = useAuth()
   const [mode, setMode] = useState<Mode>('signin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [guestSubmitting, setGuestSubmitting] = useState(false)
   const [localError, setLocalError] = useState<string | null>(null)
 
   const submit = async () => {
@@ -43,6 +52,20 @@ export function LoginPage() {
       // error message is exposed via useAuth().errorMessage
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const continueAsGuest = async () => {
+    if (guestSubmitting) return
+    setGuestSubmitting(true)
+    setLocalError(null)
+    try {
+      await signInAnonymously()
+      navigate('/', { replace: true })
+    } catch {
+      // surfaced via useAuth().errorMessage
+    } finally {
+      setGuestSubmitting(false)
     }
   }
 
@@ -189,9 +212,25 @@ export function LoginPage() {
           </button>
         </form>
 
+        <div className="mt-6 flex items-center gap-3 text-xs text-muted dark:text-muted-dark">
+          <div className="flex-1 h-px bg-border dark:bg-border-dark" />
+          <span>or</span>
+          <div className="flex-1 h-px bg-border dark:bg-border-dark" />
+        </div>
+
+        <button
+          type="button"
+          onClick={continueAsGuest}
+          disabled={guestSubmitting || !isReady || showConfigWarning}
+          className="mt-4 w-full h-12 rounded-2xl border border-border dark:border-border-dark bg-white dark:bg-card-dark text-primary dark:text-white font-medium inline-flex items-center justify-center gap-2 tap-feedback disabled:opacity-60"
+        >
+          <UserRound size={18} strokeWidth={2.2} />
+          {guestSubmitting ? 'Continuing…' : 'Continue without account'}
+        </button>
+
         <p className="mt-6 text-xs text-center text-muted dark:text-muted-dark">
-          By continuing, your expenses are stored locally and synced securely to
-          Firebase under your account.
+          Guest mode keeps data on this device only. Sign in with email to sync
+          across devices.
         </p>
       </div>
     </div>
