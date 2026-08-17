@@ -6,6 +6,7 @@ import {
   CloudOff,
   Download,
   Globe,
+  LogIn,
   LogOut,
   Mail,
   Moon,
@@ -57,6 +58,7 @@ export function SettingsPage() {
   )
   const [confirmClear, setConfirmClear] = useState(false)
   const [confirmSignOut, setConfirmSignOut] = useState(false)
+  const [confirmSwitchAccount, setConfirmSwitchAccount] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
   const [reloadKey, setReloadKey] = useState(0)
 
@@ -184,7 +186,14 @@ export function SettingsPage() {
                 value=""
                 onClick={() => setConfirmSignOut(true)}
               />
-            ) : null}
+            ) : (
+              <ListRow
+                icon={<LogIn size={18} />}
+                label="Sign in with email"
+                value="Sync across devices"
+                onClick={() => setConfirmSwitchAccount(true)}
+              />
+            )}
           </div>
           <p className="mt-2 text-xs text-muted dark:text-muted-dark px-1">
             {isEmailUser
@@ -405,6 +414,19 @@ export function SettingsPage() {
           await signOut()
         }}
         onCancel={() => setConfirmSignOut(false)}
+      />
+
+      <ConfirmDialog
+        open={confirmSwitchAccount}
+        title="Sign in with email?"
+        description="Your anonymous data on this device will be merged into the email account you sign in with."
+        confirmLabel="Continue"
+        cancelLabel="Cancel"
+        onConfirm={async () => {
+          setConfirmSwitchAccount(false)
+          await signOut()
+        }}
+        onCancel={() => setConfirmSwitchAccount(false)}
       />
 
       <div className="h-24" />
