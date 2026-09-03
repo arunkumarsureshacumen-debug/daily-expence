@@ -23,7 +23,8 @@ export function HomePage() {
     [helpers.today],
   )
   const monthTotal = helpers.monthlyTotal
-  const remaining = Math.max(0, settings.monthlyBudget - monthTotal)
+  const totalSpent = helpers.totalSpent
+  const remaining = Math.max(0, settings.monthlyBudget - totalSpent)
   const monthCount = helpers.monthly.length
 
   return (
@@ -47,9 +48,9 @@ export function HomePage() {
           </p>
           <div className="mt-4 grid grid-cols-3 gap-2 text-xs">
             <div>
-              <p className="opacity-80">This Month</p>
+              <p className="opacity-80">All Time</p>
               <p className="font-semibold text-sm mt-0.5">
-                {formatCurrency(monthTotal, settings.currency)}
+                {formatCurrency(totalSpent, settings.currency)}
               </p>
             </div>
             <div>
@@ -70,7 +71,7 @@ export function HomePage() {
 
       <Section>
         <BudgetCard
-          spent={monthTotal}
+          spent={totalSpent}
           budget={settings.monthlyBudget}
           currency={settings.currency}
         />

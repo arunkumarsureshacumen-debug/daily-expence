@@ -230,11 +230,11 @@ export function SettingsPage() {
             />
             <ListRow
               icon={<Wallet size={18} />}
-              label="Monthly Budget"
+              label="Budget"
               value={formatCurrency(settings.monthlyBudget, settings.currency)}
               onClick={() => {
                 const next = window.prompt(
-                  'Set your monthly budget',
+                  'Set your budget',
                   String(settings.monthlyBudget),
                 )
                 if (next === null) return
@@ -269,7 +269,7 @@ export function SettingsPage() {
           </div>
           <div className="mt-2">
             <label className="text-xs font-medium text-muted dark:text-muted-dark">
-              Budget
+              Budget (tracks all expenses)
             </label>
             <input
               type="number"

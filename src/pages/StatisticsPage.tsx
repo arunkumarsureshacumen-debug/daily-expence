@@ -15,10 +15,13 @@ export function StatisticsPage() {
   const { settings } = useSettings()
   const { helpers } = useExpenses()
 
-  const monthTotal = helpers.monthlyTotal
+  const totalSpent = helpers.totalSpent
   const largest = helpers.largest
-  const dailyAverage = helpers.dailyAverage
+  const dailyAverage = totalSpent && helpers.grouped.length
+    ? Math.round(totalSpent / helpers.grouped.length)
+    : 0
   const categoryTotals = helpers.categoryTotals
+  const totalEntries = helpers.grouped.reduce((s, g) => s + g.items.length, 0)
 
   const trend = useMemo(() => buildDailyTrend(helpers), [helpers])
 
@@ -26,14 +29,11 @@ export function StatisticsPage() {
     <div className="pb-24 animate-fade-in">
       <Header
         title="Statistics"
-        subtitle={new Date().toLocaleDateString('en-US', {
-          month: 'long',
-          year: 'numeric',
-        })}
+        subtitle="All expenses"
       />
 
       <div className="pt-2">
-        {helpers.monthly.length === 0 ? (
+        {totalSpent === 0 ? (
           <EmptyState
             icon={<BarChart3 size={28} strokeWidth={1.6} />}
             title="No data yet"
@@ -41,17 +41,17 @@ export function StatisticsPage() {
           />
         ) : (
           <>
-            <Section title="This month">
+            <Section title="All time">
               <div className="grid grid-cols-2 gap-3">
                 <SummaryCard
                   label="Total Spending"
-                  amount={monthTotal}
+                  amount={totalSpent}
                   currency={settings.currency}
                   emphasis
                 />
                 <SummaryCard
                   label="Daily Average"
-                  amount={Math.round(dailyAverage)}
+                  amount={dailyAverage}
                   currency={settings.currency}
                 />
                 <SummaryCard
@@ -62,7 +62,7 @@ export function StatisticsPage() {
                 />
                 <SummaryCard
                   label="Expenses"
-                  amount={helpers.monthly.length}
+                  amount={totalEntries}
                   format="number"
                 />
               </div>
@@ -70,7 +70,7 @@ export function StatisticsPage() {
 
             <Section title="Spending by category">
               <div className="rounded-2xl bg-white dark:bg-card-dark border border-border dark:border-border-dark p-4">
-                <CategoryBarChart data={categoryTotals} total={monthTotal || 0} />
+                <CategoryBarChart data={categoryTotals} total={totalSpent} />
               </div>
             </Section>
 
@@ -112,7 +112,7 @@ export function StatisticsPage() {
                     Top category
                   </p>
                   <p className="text-xs text-muted dark:text-muted-dark">
-                    {topCategoryLabel(categoryTotals, monthTotal, settings.currency)}
+                    {topCategoryLabel(categoryTotals, totalSpent, settings.currency)}
                   </p>
                 </div>
               </div>
@@ -128,15 +128,8 @@ export function StatisticsPage() {
 
 function buildDailyTrend(helpers: ReturnType<typeof useExpenses>['helpers']) {
   return helpers.grouped
-    .filter((g) => isThisMonth(g.date))
     .sort((a, b) => a.date.localeCompare(b.date))
     .map((g) => ({ date: g.date, total: g.total, count: g.items.length }))
-}
-
-function isThisMonth(dateKey: string) {
-  const now = new Date()
-  const [y, m] = dateKey.split('-').map(Number)
-  return y === now.getFullYear() && m === now.getMonth() + 1
 }
 
 function formatPeak(trend: { date: string; total: number }[]) {

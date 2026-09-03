@@ -198,6 +198,7 @@ export function useExpenses() {
       monthly: getMonthlyExpenses(expenses),
       byDate: (key: string) => getExpensesByDate(expenses, key),
       monthlyTotal: calculateMonthlyTotal(expenses),
+      totalSpent: expenses.reduce((sum, e) => sum + e.amount, 0),
       dailyAverage: calculateDailyAverage(expenses),
       largest: calculateLargestExpense(expenses),
       categoryTotals: calculateCategoryTotals(expenses),
